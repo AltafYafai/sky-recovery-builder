@@ -94,7 +94,7 @@ jobs:
         mkdir -p ${GITHUB_WORKSPACE}/SkyRecovery
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         # Use GITHUB_TOKEN for private manifest access
-        repo init -u https://${{ secrets.GITHUB_TOKEN }}@github.com/AltafYafai/sky-recovery-manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        repo init -u https://${{ env.GITHUB_TOKEN }}@github.com/AltafYafai/sky-recovery-manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }}
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Clone Device Tree
