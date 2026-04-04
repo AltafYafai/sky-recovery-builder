@@ -98,6 +98,9 @@ jobs:
         # Inject token into the local manifest to allow syncing private repos
         sed -i "s/TOKEN/${{ secrets.GH_TOKEN }}/g" .repo/manifests/default.xml
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        
+        # Patch ICU to bypass API tracking errors
+        sed -i 's/api_surface: "public",/api_surface: "public",\n    unsafe_ignore_missing_latest_api: true,/g' external/icu/android_icu4j/Android.bp
 
     - name: Clone Device Tree
       run: |
@@ -123,6 +126,8 @@ jobs:
         export BUILD_BROKEN_DUP_RULES=true
         export BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES=true
         export BUILD_BROKEN_MISSING_REQUIRED_MODULES=true
+        export BUILD_BROKEN_VINTF_PRODUCT_COPY_FILES=true
+        export BUILD_BROKEN_PREBUILT_ELF_FILES=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         make clean
         mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
