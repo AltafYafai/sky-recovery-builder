@@ -118,9 +118,10 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
+        export WITH_DEXPREOPT=false
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         make clean
-        mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 50 build.log && exit 1)
+        mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
 
     - name: Upload Build Log to Telegram
       if: always()
