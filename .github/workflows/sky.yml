@@ -119,6 +119,7 @@ jobs:
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         export WITH_DEXPREOPT=false
+        export UNSAFE_IGNORE_MISSING_LATEST_API=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         make clean
         mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
