@@ -95,6 +95,8 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         # Use GH_TOKEN (PAT) for private manifest access
         repo init -u https://${{ secrets.GH_TOKEN }}@github.com/AltafYafai/sky-recovery-manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        # Inject token into the local manifest to allow syncing private repos
+        sed -i "s/TOKEN/${{ secrets.GH_TOKEN }}/g" .repo/manifests/default.xml
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Clone Device Tree
