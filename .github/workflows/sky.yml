@@ -120,7 +120,7 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         make clean
-        mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log
+        mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 50 build.log && exit 1)
 
     - name: Upload Build Log to Telegram
       if: always()
