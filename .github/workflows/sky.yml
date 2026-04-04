@@ -1,0 +1,183 @@
+name: Sky Recovery Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      MANIFEST_URL:
+        description: 'Manifest URL'
+        required: true
+        default: 'https://github.com/AltafYafai/sky-recovery-manifest.git'
+      MANIFEST_BRANCH:
+        description: 'Manifest Branch'
+        required: true
+        default: 'main'
+      DEVICE_TREE:
+        description: 'Custom Recovery Tree'
+        required: true
+        default: 'https://github.com/AltafYafai/device_xiaomi_sky-recovery'
+      DEVICE_TREE_BRANCH:
+        description: 'Custom Recovery Tree Branch'
+        required: true
+        default: 'TWRP'
+      DEVICE_PATH:
+        description: 'Specify your device path.'
+        required: true
+        default: 'device/xiaomi/sky'
+      DEVICE_NAME:
+        description: 'Specify your Device Codename.'
+        required: true
+        default: 'sky'
+      BUILD_TARGET:
+        description: 'Specify your Build Target'
+        required: true
+        default: 'recovery'
+        type: choice
+        options:
+        - recovery
+        - boot
+        - vendorboot
+
+jobs:
+  build:
+    name: Build Sky Recovery for ${{ github.event.inputs.DEVICE_NAME }}
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+      TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+      DEVICE: ${{ github.event.inputs.DEVICE_NAME }}
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Notify Build Started
+      run: |
+        MSG="🚀 *Sky Recovery Build Started*
+        
+        📱 *Device:* \`${{ env.DEVICE }}\`
+        👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)
+        🕒 *Status:* \`Initializing Environment...\`
+        
+        🔗 [Live Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        if [ -n "$TG_BOT_TOKEN" ]; then
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TG_CHAT_ID}" \
+            -d "parse_mode=markdown" \
+            -d "text=${MSG}" \
+            -d "disable_web_page_preview=true"
+        fi
+
+    - name: Clean-up
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
+
+    - name: Build Environment
+      run: |
+        sudo apt update
+        sudo apt install aria2 curl git repo -y
+        git config --global user.name "altafyafai"
+        git config --global user.email "altaf.alu@gmail.com"
+
+    - name: Sync Source
+      run: |
+        # Notify Sync
+        MSG="🧬 *Syncing Sky Recovery Sources*
+        🕒 *Status:* \`Fetching Private Manifest...\`
+        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+        
+        mkdir -p ${GITHUB_WORKSPACE}/SkyRecovery
+        cd ${GITHUB_WORKSPACE}/SkyRecovery
+        # Use GITHUB_TOKEN for private manifest access
+        repo init -u https://${{ secrets.GITHUB_TOKEN }}@github.com/AltafYafai/sky-recovery-manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+
+    - name: Clone Device Tree
+      run: |
+        cd ${GITHUB_WORKSPACE}/SkyRecovery
+        git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+        echo "COMMIT_ID=$(git -C ${{ github.event.inputs.DEVICE_PATH }} rev-parse --short HEAD)" >> $GITHUB_ENV
+
+    - name: Building Sky Recovery
+      run: |
+        # Notify Build
+        MSG="🏗️ *Starting Compilation*
+        🕒 *Status:* \`Building ${{ github.event.inputs.BUILD_TARGET }}image...\`
+        🔗 [Live Console](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+        
+        cd ${GITHUB_WORKSPACE}/SkyRecovery
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
+        make clean
+        mka adbd ${{ github.event.inputs.BUILD_TARGET }}image
+
+    - name: Set Build Date
+      run: |
+        echo "BUILD_DATE=$(TZ=Asia/Kolkata date +%Y%m%d)" >> $GITHUB_ENV
+
+    - name: Prepare Artifacts
+      id: prep
+      run: |
+        cd ${GITHUB_WORKSPACE}/SkyRecovery/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/
+        mkdir -p ${GITHUB_WORKSPACE}/artifacts/
+        cp recovery.img ${GITHUB_WORKSPACE}/artifacts/ 2>/dev/null || true
+        cp boot.img ${GITHUB_WORKSPACE}/artifacts/ 2>/dev/null || true
+        cp vendor_boot.img ${GITHUB_WORKSPACE}/artifacts/ 2>/dev/null || true
+        
+        # Rename for Sky Recovery branding
+        if [ -f "recovery.img" ]; then
+           mv recovery.img ${GITHUB_WORKSPACE}/artifacts/Sky-Recovery-Unofficial-${{ github.event.inputs.DEVICE_NAME }}.img
+        fi
+        
+        if [ "$(ls -A ${GITHUB_WORKSPACE}/artifacts/)" ]; then
+          echo "FILES_FOUND=true" >> $GITHUB_OUTPUT
+        else
+          echo "FILES_FOUND=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Upload Release
+      if: steps.prep.outputs.FILES_FOUND == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ github.workspace }}/artifacts/*
+        name: Sky Recovery Project for ${{ github.event.inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
+        tag_name: ${{ env.BUILD_DATE }}-${{ github.run_id }}
+        body: |
+          # ☁️ Sky Recovery Project
+          
+          **Device:** Redmi 12 5G / Poco M6 Pro 5G / Redmi Note 12R (`${{ github.event.inputs.DEVICE_NAME }}`)
+          **Build Date:** `${{ env.BUILD_DATE }}`
+          **Maintainer:** [Altaf Yafai](https://github.com/AltafYafai)
+          
+          ---
+          ### 🛠 Build Info
+          - **Device Tree Commit:** `${{ env.COMMIT_ID }}`
+          - **UI Source:** [Sky Recovery Project](https://github.com/AltafYafai/sky-recovery-project)
+          
+          *Powered by Material You & Pixel Blue*
+
+    - name: Send Final Telegram Notification
+      if: always()
+      run: |
+        if [ "${{ steps.prep.outputs.FILES_FOUND }}" == "true" ]; then
+          MSG="✅ *Sky Recovery Build Successful!*
+          
+          📱 *Device:* \`Redmi 12 5G (sky)\`
+          👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)
+          
+          🔗 [Download from GitHub](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.BUILD_DATE }}-${{ github.run_id }})
+          
+          #SkyRecovery #Success #Sky #MaterialYou"
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+        else
+          MSG="❌ *Sky Recovery Build Failed!*
+          🔍 Check logs: [View Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+        fi
