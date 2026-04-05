@@ -159,15 +159,44 @@ jobs:
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
 
-        # Patch ICU to bypass API tracking errors
-        if [ -f "external/icu/android_icu4j/Android.bp" ]; then
-          # Add unsafe_ignore_missing_latest_api to the api_visibility module
-          sed -i '/sdk_version: "current",/a\        unsafe_ignore_missing_latest_api: true,' external/icu/android_icu4j/Android.bp
-        fi
+        python3 << 'PYEOF'
+        import re
 
-        # Fix bionic glob error (stat failure on clang-builtins)
-        rm -rf bionic/libc/versioner-dependencies/common/clang-builtins
-        mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
+        # 1. Remove api_visibility modules from ICU (causes "missing tracking files" error)
+        icu_bp = "external/icu/android_icu4j/Android.bp"
+        try:
+            with open(icu_bp, "r") as f:
+                content = f.read()
+            # Remove all api_visibility module blocks
+            content = re.sub(r'api_visibility\s*\{[^}]*\}\n?', '', content)
+            with open(icu_bp, "w") as f:
+                f.write(content)
+            print("✓ Removed ICU api_visibility modules")
+        except Exception as e:
+            print(f"Warning: ICU patch failed: {e}")
+
+        # 2. Remove apexd_test_postinstall module (causes Soong nil pointer panic)
+        apex_bp = "system/apex/Android.bp"
+        try:
+            with open(apex_bp, "r") as f:
+                content = f.read()
+            # Remove apexd_test_postinstall and related test modules
+            content = re.sub(r'apexd_test_postinstall\s*\{[^}]*\}\n?', '', content)
+            content = re.sub(r'apexd_test_preinstall\s*\{[^}]*\}\n?', '', content)
+            with open(apex_bp, "w") as f:
+                f.write(content)
+            print("✓ Removed APEX test modules")
+        except Exception as e:
+            print(f"Warning: APEX patch failed: {e}")
+
+        # 3. Fix bionic glob error (stat failure on clang-builtins)
+        import os, shutil
+        bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
+        if os.path.exists(bionic_path):
+            shutil.rmtree(bionic_path)
+        os.makedirs(bionic_path, exist_ok=True)
+        print("✓ Fixed bionic glob path")
+        PYEOF
 
     - name: Building Sky Recovery
       run: |
@@ -203,10 +232,6 @@ jobs:
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         export SELINUX_IGNORE_NEVERALLOWS=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
-        # Remove apexd_test_postinstall module that causes Soong nil pointer panic
-        if [ -f "system/apex/Android.bp" ]; then
-          sed -i '/apexd_test_postinstall/,/^}/d' system/apex/Android.bp
-        fi
         # Clean only stale intermediates
         rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/*.img 2>/dev/null
         rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/obj/EXECUTABLES 2>/dev/null
