@@ -160,43 +160,84 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
 
         python3 << 'PYEOF'
-        import re
+        import re, os
 
-        # 1. Remove api_visibility modules from ICU (causes "missing tracking files" error)
+        # 1. Remove ALL api_visibility modules from ICU Android.bp
         icu_bp = "external/icu/android_icu4j/Android.bp"
         try:
             with open(icu_bp, "r") as f:
-                content = f.read()
-            # Remove all api_visibility module blocks
-            content = re.sub(r'api_visibility\s*\{[^}]*\}\n?', '', content)
+                lines = f.readlines()
+            
+            # State machine to remove api_visibility blocks (handles nested braces)
+            result = []
+            in_block = False
+            brace_depth = 0
+            for line in lines:
+                stripped = line.strip()
+                if not in_block:
+                    if stripped.startswith("api_visibility"):
+                        in_block = True
+                        brace_depth = stripped.count("{") - stripped.count("}")
+                        continue
+                    result.append(line)
+                else:
+                    brace_depth += stripped.count("{") - stripped.count("}")
+                    if brace_depth <= 0:
+                        in_block = False
             with open(icu_bp, "w") as f:
-                f.write(content)
+                f.writelines(result)
             print("✓ Removed ICU api_visibility modules")
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Remove apexd_test_postinstall module (causes Soong nil pointer panic)
+        # 2. Remove apexd_test modules from system/apex/Android.bp
         apex_bp = "system/apex/Android.bp"
         try:
             with open(apex_bp, "r") as f:
-                content = f.read()
-            # Remove apexd_test_postinstall and related test modules
-            content = re.sub(r'apexd_test_postinstall\s*\{[^}]*\}\n?', '', content)
-            content = re.sub(r'apexd_test_preinstall\s*\{[^}]*\}\n?', '', content)
+                lines = f.readlines()
+            
+            result = []
+            in_block = False
+            brace_depth = 0
+            skip_targets = ["apexd_test_postinstall", "apexd_test_preinstall"]
+            current_target = None
+            
+            for line in lines:
+                stripped = line.strip()
+                if not in_block:
+                    # Check if this line starts a module we want to skip
+                    should_skip = False
+                    for target in skip_targets:
+                        if stripped.startswith(target):
+                            should_skip = True
+                            current_target = target
+                            break
+                    if should_skip:
+                        in_block = True
+                        brace_depth = stripped.count("{") - stripped.count("}")
+                        if brace_depth <= 0:
+                            in_block = False
+                    else:
+                        result.append(line)
+                else:
+                    brace_depth += stripped.count("{") - stripped.count("}")
+                    if brace_depth <= 0:
+                        in_block = False
+            
             with open(apex_bp, "w") as f:
-                f.write(content)
+                f.writelines(result)
             print("✓ Removed APEX test modules")
         except Exception as e:
             print(f"Warning: APEX patch failed: {e}")
 
-        # 3. Fix bionic glob error (stat failure on clang-builtins)
-        import os, shutil
-        bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
+        # 3. Fix bionic glob error
         try:
+            bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
             if os.path.exists(bionic_path):
                 if os.path.isfile(bionic_path):
                     os.remove(bionic_path)
                 elif os.path.isdir(bionic_path):
+                    import shutil
                     shutil.rmtree(bionic_path)
             os.makedirs(bionic_path, exist_ok=True)
             print("✓ Fixed bionic glob path")
