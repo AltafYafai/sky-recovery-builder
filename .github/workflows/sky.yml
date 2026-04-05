@@ -160,7 +160,10 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
 
         # Patch ICU to bypass API tracking errors
-        sed -i 's/api_surface: "public",/api_surface: "public",\n    unsafe_ignore_missing_latest_api: true,/g' external/icu/android_icu4j/Android.bp
+        if [ -f "external/icu/android_icu4j/Android.bp" ]; then
+          # Add unsafe_ignore_missing_latest_api to the api_visibility module
+          sed -i '/sdk_version: "current",/a\        unsafe_ignore_missing_latest_api: true,' external/icu/android_icu4j/Android.bp
+        fi
 
         # Fix bionic glob error (stat failure on clang-builtins)
         rm -rf bionic/libc/versioner-dependencies/common/clang-builtins
@@ -192,16 +195,14 @@ jobs:
         export BUILD_BROKEN_PREBUILT_ELF_FILES=true
         export BUILD_BROKEN_USES_BUILD_COPY_MODULE=true
         export BUILD_BROKEN_MISSING_SYSTEM_RECOVERY=true
+        export BUILD_BROKEN_SDK_COVERAGE=true
+        export BUILD_BROKEN_INPUT_DIR_MODULES=true
         export OVERRIDE_TARGET_FLATTEN_APEX=true
         export TW_EXCLUDE_APEX=true
         export TARGET_DISABLE_APEX=true
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         export SELINUX_IGNORE_NEVERALLOWS=true
-        # Disable test modules to prevent apex test postinstall panic
-        export BUILD_BROKEN_ENFORCE_SYSPROPS_OWNER=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
-        # Disable apex-related Soong modules via environment
-        export SOONG_APEX_MODULES_DISABLED=true
         # Remove apexd_test_postinstall module that causes Soong nil pointer panic
         if [ -f "system/apex/Android.bp" ]; then
           sed -i '/apexd_test_postinstall/,/^}/d' system/apex/Android.bp
