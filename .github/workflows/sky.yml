@@ -160,33 +160,23 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
 
         python3 << 'PYEOF'
-        import re, os
+        import os
 
-        # 1. Remove ALL api_visibility modules from ICU Android.bp
+        # 1. Add unsafe_ignore_missing_latest_api to ICU Android.bp
         icu_bp = "external/icu/android_icu4j/Android.bp"
         try:
             with open(icu_bp, "r") as f:
-                lines = f.readlines()
-            
-            # State machine to remove api_visibility blocks (handles nested braces)
+                content = f.read()
+            # Find each api_visibility block and add the property after the opening brace
+            lines = content.split("\n")
             result = []
-            in_block = False
-            brace_depth = 0
-            for line in lines:
-                stripped = line.strip()
-                if not in_block:
-                    if stripped.startswith("api_visibility"):
-                        in_block = True
-                        brace_depth = stripped.count("{") - stripped.count("}")
-                        continue
-                    result.append(line)
-                else:
-                    brace_depth += stripped.count("{") - stripped.count("}")
-                    if brace_depth <= 0:
-                        in_block = False
+            for i, line in enumerate(lines):
+                result.append(line)
+                if "api_visibility" in line and "{" in line:
+                    result.append("        unsafe_ignore_missing_latest_api: true,")
             with open(icu_bp, "w") as f:
-                f.writelines(result)
-            print("✓ Removed ICU api_visibility modules")
+                f.write("\n".join(result))
+            print("✓ Added unsafe_ignore_missing_latest_api to ICU")
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
@@ -195,35 +185,21 @@ jobs:
         try:
             with open(apex_bp, "r") as f:
                 lines = f.readlines()
-            
             result = []
-            in_block = False
-            brace_depth = 0
-            skip_targets = ["apexd_test_postinstall", "apexd_test_preinstall"]
-            current_target = None
-            
+            skip = False
+            depth = 0
             for line in lines:
-                stripped = line.strip()
-                if not in_block:
-                    # Check if this line starts a module we want to skip
-                    should_skip = False
-                    for target in skip_targets:
-                        if stripped.startswith(target):
-                            should_skip = True
-                            current_target = target
-                            break
-                    if should_skip:
-                        in_block = True
-                        brace_depth = stripped.count("{") - stripped.count("}")
-                        if brace_depth <= 0:
-                            in_block = False
-                    else:
-                        result.append(line)
-                else:
-                    brace_depth += stripped.count("{") - stripped.count("}")
-                    if brace_depth <= 0:
-                        in_block = False
-            
+                s = line.strip()
+                if not skip and ("apexd_test_postinstall" in s or "apexd_test_preinstall" in s):
+                    skip = True
+                    depth = s.count("{") - s.count("}")
+                    continue
+                if skip:
+                    depth += s.count("{") - s.count("}")
+                    if depth <= 0:
+                        skip = False
+                    continue
+                result.append(line)
             with open(apex_bp, "w") as f:
                 f.writelines(result)
             print("✓ Removed APEX test modules")
@@ -234,12 +210,9 @@ jobs:
         try:
             bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
             if os.path.exists(bionic_path):
-                if os.path.isfile(bionic_path):
-                    os.remove(bionic_path)
-                elif os.path.isdir(bionic_path):
-                    import shutil
-                    shutil.rmtree(bionic_path)
-            os.makedirs(bionic_path, exist_ok=True)
+                import shutil
+                shutil.rmtree(bionic_path)
+            os.makedirs(bionic_path)
             print("✓ Fixed bionic glob path")
         except Exception as e:
             print(f"Warning: bionic fix failed: {e}")
@@ -283,7 +256,8 @@ jobs:
         rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/*.img 2>/dev/null
         rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/obj/EXECUTABLES 2>/dev/null
         # Build recoveryimage
-        mka ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
+        set -o pipefail
+        mka ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log
 
     - name: Upload Build Log to Telegram
       if: always()
