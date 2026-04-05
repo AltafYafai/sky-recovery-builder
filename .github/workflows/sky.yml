@@ -192,10 +192,16 @@ jobs:
         # 3. Fix bionic glob error (stat failure on clang-builtins)
         import os, shutil
         bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
-        if os.path.exists(bionic_path):
-            shutil.rmtree(bionic_path)
-        os.makedirs(bionic_path, exist_ok=True)
-        print("✓ Fixed bionic glob path")
+        try:
+            if os.path.exists(bionic_path):
+                if os.path.isfile(bionic_path):
+                    os.remove(bionic_path)
+                elif os.path.isdir(bionic_path):
+                    shutil.rmtree(bionic_path)
+            os.makedirs(bionic_path, exist_ok=True)
+            print("✓ Fixed bionic glob path")
+        except Exception as e:
+            print(f"Warning: bionic fix failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
