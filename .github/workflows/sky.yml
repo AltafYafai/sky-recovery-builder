@@ -198,7 +198,17 @@ jobs:
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Fix bionic glob - the clang-builtins path might be a file, replace it with directory
+        # 2. Empty APEX Android.bp - recovery doesn't need APEX modules
+        #    But the file must exist because packages/modules/adb/Android.bp includes it
+        apex_bp = "system/apex/Android.bp"
+        try:
+            with open(apex_bp, "w") as f:
+                f.write("// APEX modules disabled for recovery build\n")
+            print("✓ Emptied APEX Android.bp (kept file for adb include)")
+        except Exception as e:
+            print(f"Warning: APEX patch failed: {e}")
+
+        # 3. Fix bionic glob - the clang-builtins path might be a file, replace it with directory
         try:
             bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
             if os.path.islink(bionic_path):
