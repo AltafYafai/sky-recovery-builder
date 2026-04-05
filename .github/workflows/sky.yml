@@ -166,18 +166,6 @@ jobs:
         rm -rf bionic/libc/versioner-dependencies/common/clang-builtins
         mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
 
-        # Patch ADB module to remove APEX dependencies (not needed for recovery)
-        ADB_BP="packages/modules/adb/Android.bp"
-        if [ -f "$ADB_BP" ]; then
-          # Remove the system/apex import block
-          sed -i '/soong_config_module_type_import {/,/}/d' "$ADB_BP"
-          sed -i '/system\/apex\/Android.bp/d' "$ADB_BP"
-          # Remove library_linking_strategy_cc_defaults module
-          sed -i '/library_linking_strategy_cc_defaults {/,/}/d' "$ADB_BP"
-          # Remove apex defaults file references
-          rm -f packages/modules/adb/apex/Android.bp
-        fi
-
     - name: Building Sky Recovery
       run: |
         # Update Telegram with build status
@@ -209,13 +197,19 @@ jobs:
         export TARGET_DISABLE_APEX=true
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         export SELINUX_IGNORE_NEVERALLOWS=true
-        export SOONG_DONT_PANIC=1
-        export SOONG_HOST_GO_EXPERIMENTAL=0
+        # Disable test modules to prevent apex test postinstall panic
+        export BUILD_BROKEN_ENFORCE_SYSPROPS_OWNER=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
-        # Clean only stale intermediates to avoid unlinkat errors while preserving ccache
-        rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/*.img
-        rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/obj/EXECUTABLES
-        # Build recoveryimage only (adbd is already included in TWRP)
+        # Disable apex-related Soong modules via environment
+        export SOONG_APEX_MODULES_DISABLED=true
+        # Remove apexd_test_postinstall module that causes Soong nil pointer panic
+        if [ -f "system/apex/Android.bp" ]; then
+          sed -i '/apexd_test_postinstall/,/^}/d' system/apex/Android.bp
+        fi
+        # Clean only stale intermediates
+        rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/*.img 2>/dev/null
+        rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/obj/EXECUTABLES 2>/dev/null
+        # Build recoveryimage
         mka ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
 
     - name: Upload Build Log to Telegram
