@@ -160,46 +160,41 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
 
         python3 << 'PYEOF'
-        import os
+        import os, shutil
 
-        # 1. Fix ICU: remove api_visibility property lines that cause "missing tracking files" error
-        #    api_visibility is a property like:  api_visibility: "public",
+        # 1. Fix ICU: java_sdk_library modules need API tracking files that don't exist
+        #    Remove ALL java_sdk_library blocks (not needed for recovery build)
         icu_bp = "external/icu/android_icu4j/Android.bp"
         try:
             with open(icu_bp, "r") as f:
                 lines = f.readlines()
             
-            # Remove lines with api_visibility property (handles both formats)
             result = []
-            skip_block = False
-            block_depth = 0
+            skip = False
+            depth = 0
             
             for line in lines:
                 stripped = line.strip()
                 
-                # Remove simple property lines: api_visibility: "public",
-                if "api_visibility" in stripped and ":" in stripped and "{" not in stripped:
+                # Start of java_sdk_library block - skip entire block
+                if not skip and stripped.startswith("java_sdk_library"):
+                    skip = True
+                    depth = stripped.count("{") - stripped.count("}")
+                    if depth <= 0:
+                        skip = False
                     continue
                 
-                # Handle block-style: api_visibility { ... }
-                if not skip_block and "api_visibility" in stripped and "{" in stripped:
-                    skip_block = True
-                    block_depth = stripped.count("{") - stripped.count("}")
-                    if block_depth <= 0:
-                        skip_block = False
-                    continue
-                
-                if skip_block:
-                    block_depth += stripped.count("{") - stripped.count("}")
-                    if block_depth <= 0:
-                        skip_block = False
+                if skip:
+                    depth += stripped.count("{") - stripped.count("}")
+                    if depth <= 0:
+                        skip = False
                     continue
                 
                 result.append(line)
             
             with open(icu_bp, "w") as f:
                 f.writelines(result)
-            print("✓ Removed api_visibility from ICU")
+            print("✓ Removed java_sdk_library modules from ICU")
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
@@ -233,7 +228,6 @@ jobs:
         try:
             bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
             if os.path.exists(bionic_path):
-                import shutil
                 shutil.rmtree(bionic_path, ignore_errors=True)
             os.makedirs(bionic_path, exist_ok=True)
             print("✓ Fixed bionic glob path")
@@ -275,6 +269,8 @@ jobs:
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         export SELINUX_IGNORE_NEVERALLOWS=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
+        # Clean Soong cache to ensure fresh configuration
+        rm -rf out/soong 2>/dev/null
         # Clean only stale intermediates
         rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/*.img 2>/dev/null
         rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/obj/EXECUTABLES 2>/dev/null
