@@ -198,7 +198,8 @@ jobs:
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Remove apexd_test modules from system/apex/Android.bp
+        # 2. Remove ALL test/example APEX modules (they cause Soong nil pointer panics)
+        #    These include com.android.example*.apex, com.android.apex.compressed*, apexd_test*
         apex_bp = "system/apex/Android.bp"
         try:
             with open(apex_bp, "r") as f:
@@ -208,9 +209,11 @@ jobs:
             depth = 0
             for line in lines:
                 s = line.strip()
-                if not skip and ("apexd_test_postinstall" in s or "apexd_test_preinstall" in s):
+                if not skip and any(x in s for x in ["example", "test", "compressed", "overridden", "logging_parent"]):
                     skip = True
                     depth = s.count("{") - s.count("}")
+                    if depth <= 0:
+                        skip = False
                     continue
                 if skip:
                     depth += s.count("{") - s.count("}")
@@ -220,7 +223,7 @@ jobs:
                 result.append(line)
             with open(apex_bp, "w") as f:
                 f.writelines(result)
-            print("✓ Removed APEX test modules")
+            print("✓ Removed APEX test/example modules")
         except Exception as e:
             print(f"Warning: APEX patch failed: {e}")
 
