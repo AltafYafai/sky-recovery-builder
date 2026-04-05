@@ -77,6 +77,15 @@ jobs:
       with:
         swap-size-gb: 12
 
+    - name: Restore Cached Source
+      id: cache-restore
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/SkyRecovery/.repo
+        key: sky-recovery-repo-${{ hashFiles('**/default.xml') }}
+        restore-keys: |
+          sky-recovery-repo-
+
     - name: Build Environment
       run: |
         sudo apt update
@@ -90,13 +99,15 @@ jobs:
         MSG="🧬 *Syncing Sky Recovery Sources*
         🕒 *Status:* \`Fetching Private Manifest...\` "
         curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
-        
+
         mkdir -p ${GITHUB_WORKSPACE}/SkyRecovery
         cd ${GITHUB_WORKSPACE}/SkyRecovery
+        # Strip https://github.com/ from MANIFEST_URL for token injection
+        MANIFEST_PATH=$(echo "${{ github.event.inputs.MANIFEST_URL }}" | sed 's|https://github.com/||')
         # Use GH_TOKEN (PAT) for private manifest access
-        repo init -u https://${{ secrets.GH_TOKEN }}@github.com/AltafYafai/sky-recovery-manifest.git -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        repo init -u https://${{ secrets.GH_TOKEN }}@${MANIFEST_PATH} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
         # Inject token into the local manifest to allow syncing private repos
-        sed -i "s/TOKEN/${{ secrets.GH_TOKEN }}/g" .repo/manifests/default.xml
+        sed -i "s|TOKEN|${{ secrets.GH_TOKEN }}|g" .repo/manifests/default.xml
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Clone Device Tree
@@ -140,8 +151,9 @@ jobs:
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         export SELINUX_IGNORE_NEVERALLOWS=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
-        # Clean out directory to avoid unlinkat errors
-        rm -rf out
+        # Clean only stale intermediates to avoid unlinkat errors while preserving ccache
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
+        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/obj/EXECUTABLES
         mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
 
     - name: Upload Build Log to Telegram
@@ -159,21 +171,35 @@ jobs:
     - name: Prepare Artifacts
       id: prep
       run: |
-        cd ${GITHUB_WORKSPACE}/SkyRecovery/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/
+        BUILD_DIR=${GITHUB_WORKSPACE}/SkyRecovery/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/
         mkdir -p ${GITHUB_WORKSPACE}/artifacts/
-        cp recovery.img ${GITHUB_WORKSPACE}/artifacts/ 2>/dev/null || true
-        cp boot.img ${GITHUB_WORKSPACE}/artifacts/ 2>/dev/null || true
-        cp vendor_boot.img ${GITHUB_WORKSPACE}/artifacts/ 2>/dev/null || true
-        
-        # Rename for Sky Recovery branding
-        if [ -f "recovery.img" ]; then
-           mv recovery.img ${GITHUB_WORKSPACE}/artifacts/Sky-Recovery-Unofficial-${{ github.event.inputs.DEVICE_NAME }}.img
+
+        # Verify build output directory exists
+        if [ ! -d "$BUILD_DIR" ]; then
+          echo "❌ Build output directory not found: $BUILD_DIR"
+          echo "FILES_FOUND=false" >> $GITHUB_OUTPUT
+          exit 0
         fi
-        
-        if [ "$(ls -A ${GITHUB_WORKSPACE}/artifacts/)" ]; then
+
+        # Copy available images
+        FOUND_ANY=false
+        for img in recovery.img boot.img vendor_boot.img; do
+          if [ -f "$BUILD_DIR/$img" ]; then
+            cp "$BUILD_DIR/$img" ${GITHUB_WORKSPACE}/artifacts/
+            FOUND_ANY=true
+          fi
+        done
+
+        # Rename for Sky Recovery branding
+        if [ -f "${GITHUB_WORKSPACE}/artifacts/recovery.img" ]; then
+           mv ${GITHUB_WORKSPACE}/artifacts/recovery.img ${GITHUB_WORKSPACE}/artifacts/Sky-Recovery-Unofficial-${{ github.event.inputs.DEVICE_NAME }}.img
+        fi
+
+        if [ "$FOUND_ANY" = true ]; then
           echo "FILES_FOUND=true" >> $GITHUB_OUTPUT
         else
           echo "FILES_FOUND=false" >> $GITHUB_OUTPUT
+          echo "⚠️ No build artifacts found. Expected: recovery.img, boot.img, or vendor_boot.img"
         fi
 
     - name: Upload Release
