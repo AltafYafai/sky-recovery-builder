@@ -120,10 +120,9 @@ jobs:
 
         mkdir -p ${GITHUB_WORKSPACE}/SkyRecovery
         cd ${GITHUB_WORKSPACE}/SkyRecovery
-        # Strip https://github.com/ from MANIFEST_URL for token injection
-        MANIFEST_PATH=$(echo "${{ github.event.inputs.MANIFEST_URL }}" | sed 's|https://github.com/||')
-        # Use GH_TOKEN (PAT) for private manifest access
-        repo init -u https://${{ secrets.GH_TOKEN }}@${MANIFEST_PATH} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        # Inject GH_TOKEN into manifest URL for private repo access
+        MANIFEST_AUTH=$(echo "${{ github.event.inputs.MANIFEST_URL }}" | sed 's|https://|https://${{ secrets.GH_TOKEN }}@|')
+        repo init -u ${MANIFEST_AUTH} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
         # Inject token into the local manifest to allow syncing private repos
         sed -i "s|TOKEN|${{ secrets.GH_TOKEN }}|g" .repo/manifests/default.xml
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
