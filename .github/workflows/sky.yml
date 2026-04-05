@@ -140,6 +140,8 @@ jobs:
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./device/xiaomi/sky
         echo "COMMIT_ID=$(git -C device/xiaomi/sky rev-parse --short HEAD)" >> $GITHUB_ENV
         echo "COMMIT_MSG=$(git -C device/xiaomi/sky log -1 --pretty=format:"%s")" >> $GITHUB_ENV
+        # TWRP uses twrp_ prefix for target product
+        echo "TARGET_PRODUCT=twrp_${{ github.event.inputs.DEVICE_NAME }}" >> $GITHUB_ENV
 
         # Update Telegram with commit info
         BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -198,8 +200,8 @@ jobs:
         export SOONG_HOST_GO_EXPERIMENTAL=0
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         # Clean only stale intermediates to avoid unlinkat errors while preserving ccache
-        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
-        rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/obj/EXECUTABLES
+        rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/*.img
+        rm -rf out/target/product/${{ env.TARGET_PRODUCT }}/obj/EXECUTABLES
         # Build recoveryimage only (adbd is already included in TWRP)
         mka ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
 
@@ -218,7 +220,7 @@ jobs:
     - name: Prepare Artifacts
       id: prep
       run: |
-        BUILD_DIR=${GITHUB_WORKSPACE}/SkyRecovery/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/
+        BUILD_DIR=${GITHUB_WORKSPACE}/SkyRecovery/out/target/product/${{ env.TARGET_PRODUCT }}/
         mkdir -p ${GITHUB_WORKSPACE}/artifacts/
 
         # Verify build output directory exists
