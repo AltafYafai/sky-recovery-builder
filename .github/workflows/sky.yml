@@ -103,6 +103,7 @@ jobs:
         sed -i 's/api_surface: "public",/api_surface: "public",\n    unsafe_ignore_missing_latest_api: true,/g' external/icu/android_icu4j/Android.bp
         
         # Fix bionic glob error (stat failure on clang-builtins)
+        rm -rf bionic/libc/versioner-dependencies/common/clang-builtins
         mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
 
     - name: Clone Device Tree
