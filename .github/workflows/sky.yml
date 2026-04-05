@@ -101,13 +101,16 @@ jobs:
         
         # Patch ICU to bypass API tracking errors
         sed -i 's/api_surface: "public",/api_surface: "public",\n    unsafe_ignore_missing_latest_api: true,/g' external/icu/android_icu4j/Android.bp
+        
+        # Fix bionic glob error (stat failure on clang-builtins)
+        mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
 
     - name: Clone Device Tree
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
-        git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
-        echo "COMMIT_ID=$(git -C ${{ github.event.inputs.DEVICE_PATH }} rev-parse --short HEAD)" >> $GITHUB_ENV
-        echo "COMMIT_MSG=$(git -C ${{ github.event.inputs.DEVICE_PATH }} log -1 --pretty=format:"%s")" >> $GITHUB_ENV
+        git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./device/xiaomi/sky
+        echo "COMMIT_ID=$(git -C device/xiaomi/sky rev-parse --short HEAD)" >> $GITHUB_ENV
+        echo "COMMIT_MSG=$(git -C device/xiaomi/sky log -1 --pretty=format:"%s")" >> $GITHUB_ENV
 
     - name: Building Sky Recovery
       run: |
@@ -129,7 +132,8 @@ jobs:
         export BUILD_BROKEN_VINTF_PRODUCT_COPY_FILES=true
         export BUILD_BROKEN_PREBUILT_ELF_FILES=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
-        make clean
+        # Clean out directory to avoid unlinkat errors
+        rm -rf out
         mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
 
     - name: Upload Build Log to Telegram
