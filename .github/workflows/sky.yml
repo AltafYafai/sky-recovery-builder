@@ -198,7 +198,18 @@ jobs:
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Fix bionic glob - the clang-builtins path might be a file, replace it with directory
+        # 2. Clear ALL APEX modules - recovery doesn't need APEX and test modules crash Soong
+        #    The system/apex/Android.bp has dozens of broken test/example modules that cause
+        #    Soong nil pointer panics. Instead of patching each one, just empty the file.
+        apex_bp = "system/apex/Android.bp"
+        try:
+            with open(apex_bp, "w") as f:
+                f.write("// APEX modules disabled for recovery build\n")
+            print("✓ Cleared APEX modules (recovery doesn't need them)")
+        except Exception as e:
+            print(f"Warning: APEX patch failed: {e}")
+
+        # 3. Fix bionic glob - the clang-builtins path might be a file, replace it with directory
         try:
             bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
             if os.path.islink(bionic_path):
