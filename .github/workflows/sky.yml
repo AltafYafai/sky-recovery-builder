@@ -158,12 +158,25 @@ jobs:
     - name: Patching Source
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
+
         # Patch ICU to bypass API tracking errors
         sed -i 's/api_surface: "public",/api_surface: "public",\n    unsafe_ignore_missing_latest_api: true,/g' external/icu/android_icu4j/Android.bp
-        
+
         # Fix bionic glob error (stat failure on clang-builtins)
         rm -rf bionic/libc/versioner-dependencies/common/clang-builtins
         mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
+
+        # Patch ADB module to remove APEX dependencies (not needed for recovery)
+        ADB_BP="packages/modules/adb/Android.bp"
+        if [ -f "$ADB_BP" ]; then
+          # Remove the system/apex import block
+          sed -i '/soong_config_module_type_import {/,/}/d' "$ADB_BP"
+          sed -i '/system\/apex\/Android.bp/d' "$ADB_BP"
+          # Remove library_linking_strategy_cc_defaults module
+          sed -i '/library_linking_strategy_cc_defaults {/,/}/d' "$ADB_BP"
+          # Remove apex defaults file references
+          rm -f packages/modules/adb/apex/Android.bp
+        fi
 
     - name: Building Sky Recovery
       run: |
