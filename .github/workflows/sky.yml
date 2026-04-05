@@ -132,6 +132,9 @@ jobs:
         export BUILD_BROKEN_MISSING_REQUIRED_MODULES=true
         export BUILD_BROKEN_VINTF_PRODUCT_COPY_FILES=true
         export BUILD_BROKEN_PREBUILT_ELF_FILES=true
+        export OVERRIDE_TARGET_FLATTEN_APEX=true
+        export TW_EXCLUDE_APEX=true
+        export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         # Clean out directory to avoid unlinkat errors
         rm -rf out
