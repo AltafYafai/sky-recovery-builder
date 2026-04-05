@@ -120,6 +120,12 @@ jobs:
 
         mkdir -p ${GITHUB_WORKSPACE}/SkyRecovery
         cd ${GITHUB_WORKSPACE}/SkyRecovery
+
+        # Fix stale cache: reset manifests if they exist
+        if [ -d ".repo/manifests" ]; then
+          cd .repo/manifests && git reset --hard && git clean -fd && cd ../..
+        fi
+
         # Inject GH_TOKEN into manifest URL for private repo access
         MANIFEST_AUTH=$(echo "${{ github.event.inputs.MANIFEST_URL }}" | sed 's|https://|https://${{ secrets.GH_TOKEN }}@|')
         repo init -u ${MANIFEST_AUTH} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
