@@ -52,21 +52,32 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Notify Build Started
+    - name: Get Commit Info
+      id: commit-info
       run: |
-        MSG="🚀 *Sky Recovery Build Started*
-        
-        📱 *Device:* \`${{ env.DEVICE }}\`
-        👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)
-        🕒 *Status:* \`Initializing Environment...\`
-        
-        🔗 [Live Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+        cd ${GITHUB_WORKSPACE}
+        # If device tree already exists, capture its info
+        if [ -d "device/xiaomi/sky" ]; then
+          echo "COMMIT_ID=$(git -C device/xiaomi/sky rev-parse --short HEAD 2>/dev/null || echo 'N/A')" >> $GITHUB_ENV
+          echo "COMMIT_MSG=$(git -C device/xiaomi/sky log -1 --pretty=format:'%s' 2>/dev/null || echo 'N/A')" >> $GITHUB_ENV
+        else
+          echo "COMMIT_ID=pending" >> $GITHUB_ENV
+          echo "COMMIT_MSG=pending" >> $GITHUB_ENV
+        fi
+
+    - name: Notify Build Started
+      id: notify-start
+      run: |
+        BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        MSG="☁️ *Sky Recovery Build*\n\n📱 *Device:* \`${{ env.DEVICE }}\`\n🔧 *Target:* \`${{ github.event.inputs.BUILD_TARGET }}image\`\n👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)\n\n📝 *Commit:* \`${{ env.COMMIT_ID }}\`\n📋 *Message:* \`${{ env.COMMIT_MSG }}\`\n\n🔄 *Status:* \`⏳ Starting...\`\n\n🔗 [View Run](${BUILD_URL})"
         if [ -n "$TG_BOT_TOKEN" ]; then
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+          RESP=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TG_CHAT_ID}" \
-            -d "parse_mode=markdown" \
+            -d "parse_mode=Markdown" \
             -d "text=${MSG}" \
-            -d "disable_web_page_preview=true"
+            -d "disable_web_page_preview=true")
+          MSG_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['message_id'])" 2>/dev/null)
+          echo "TG_MSG_ID=${MSG_ID}" >> $GITHUB_OUTPUT
         fi
 
     - name: Clean-up
@@ -95,10 +106,17 @@ jobs:
 
     - name: Sync Source
       run: |
-        # Notify Sync
-        MSG="🧬 *Syncing Sky Recovery Sources*
-        🕒 *Status:* \`Fetching Private Manifest...\` "
-        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+        # Update Telegram status
+        BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        MSG="☁️ *Sky Recovery Build*\n\n📱 *Device:* \`${{ env.DEVICE }}\`\n🔧 *Target:* \`${{ github.event.inputs.BUILD_TARGET }}image\`\n👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)\n\n📝 *Commit:* \`${{ env.COMMIT_ID }}\`\n📋 *Message:* \`${{ env.COMMIT_MSG }}\`\n\n🔄 *Status:* \`🔄 Syncing Sources...\`\n\n🔗 [View Run](${BUILD_URL})"
+        if [ -n "${{ steps.notify-start.outputs.TG_MSG_ID }}" ] && [ -n "$TG_BOT_TOKEN" ]; then
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" \
+            -d "chat_id=${TG_CHAT_ID}" \
+            -d "message_id=${{ steps.notify-start.outputs.TG_MSG_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "text=${MSG}" \
+            -d "disable_web_page_preview=true"
+        fi
 
         mkdir -p ${GITHUB_WORKSPACE}/SkyRecovery
         cd ${GITHUB_WORKSPACE}/SkyRecovery
@@ -111,11 +129,24 @@ jobs:
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Clone Device Tree
+      id: clone-tree
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./device/xiaomi/sky
         echo "COMMIT_ID=$(git -C device/xiaomi/sky rev-parse --short HEAD)" >> $GITHUB_ENV
         echo "COMMIT_MSG=$(git -C device/xiaomi/sky log -1 --pretty=format:"%s")" >> $GITHUB_ENV
+
+        # Update Telegram with commit info
+        BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        MSG="☁️ *Sky Recovery Build*\n\n📱 *Device:* \`${{ env.DEVICE }}\`\n🔧 *Target:* \`${{ github.event.inputs.BUILD_TARGET }}image\`\n👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)\n\n📝 *Commit:* \`${{ env.COMMIT_ID }}\`\n📋 *Message:* \`${{ env.COMMIT_MSG }}\`\n\n🔄 *Status:* \`🌳 Device Tree Cloned\`\n\n🔗 [View Run](${BUILD_URL})"
+        if [ -n "${{ steps.notify-start.outputs.TG_MSG_ID }}" ] && [ -n "$TG_BOT_TOKEN" ]; then
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" \
+            -d "chat_id=${TG_CHAT_ID}" \
+            -d "message_id=${{ steps.notify-start.outputs.TG_MSG_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "text=${MSG}" \
+            -d "disable_web_page_preview=true"
+        fi
 
     - name: Patching Source
       run: |
@@ -129,13 +160,18 @@ jobs:
 
     - name: Building Sky Recovery
       run: |
-        # Notify Build
-        MSG="🏗️ *Starting Compilation*
-        🕒 *Status:* \`Building ${{ github.event.inputs.BUILD_TARGET }}image...\`
-        📝 *Commit:* \`${{ env.COMMIT_MSG }}\`
-        🔗 [Live Console](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-        curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
-        
+        # Update Telegram with build status
+        BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        MSG="☁️ *Sky Recovery Build*\n\n📱 *Device:* \`${{ env.DEVICE }}\`\n🔧 *Target:* \`${{ github.event.inputs.BUILD_TARGET }}image\`\n👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)\n\n📝 *Commit:* \`${{ env.COMMIT_ID }}\`\n📋 *Message:* \`${{ env.COMMIT_MSG }}\`\n\n🔄 *Status:* \`🏗️ Compiling...\`\n\n🔗 [View Run](${BUILD_URL})"
+        if [ -n "${{ steps.notify-start.outputs.TG_MSG_ID }}" ] && [ -n "$TG_BOT_TOKEN" ]; then
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" \
+            -d "chat_id=${TG_CHAT_ID}" \
+            -d "message_id=${{ steps.notify-start.outputs.TG_MSG_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "text=${MSG}" \
+            -d "disable_web_page_preview=true"
+        fi
+
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
@@ -226,18 +262,23 @@ jobs:
     - name: Send Final Telegram Notification
       if: always()
       run: |
+        BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.BUILD_DATE }}-${{ github.run_id }}"
+
         if [ "${{ steps.prep.outputs.FILES_FOUND }}" == "true" ]; then
-          MSG="✅ *Sky Recovery Build Successful!*
-          
-          📱 *Device:* \`Redmi 12 5G (sky)\`
-          👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)
-          
-          🔗 [Download from GitHub](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.BUILD_DATE }}-${{ github.run_id }})
-          
-          #SkyRecovery #Success #Sky #MaterialYou"
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+          STATUS="✅ *Build Successful!*"
+          EXTRA="\n\n📦 *Download:* [Release Page](${RELEASE_URL})\n\n#SkyRecovery #Success #Sky #MaterialYou"
         else
-          MSG="❌ *Sky Recovery Build Failed!*
-          🔍 Check logs: [View Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" -d "chat_id=${TG_CHAT_ID}" -d "parse_mode=markdown" -d "text=${MSG}"
+          STATUS="❌ *Build Failed!*"
+          EXTRA="\n\n🔍 *Check logs:* [View Console](${BUILD_URL})"
+        fi
+
+        MSG="☁️ *Sky Recovery Build*\n\n📱 *Device:* \`${{ env.DEVICE }}\`\n🔧 *Target:* \`${{ github.event.inputs.BUILD_TARGET }}image\`\n👤 *Maintainer:* [Altaf Yafai](https://github.com/AltafYafai)\n\n📝 *Commit:* \`${{ env.COMMIT_ID }}\`\n📋 *Message:* \`${{ env.COMMIT_MSG }}\`\n\n${STATUS}\n\n🔗 [View Run](${BUILD_URL})${EXTRA}"
+        if [ -n "${{ steps.notify-start.outputs.TG_MSG_ID }}" ] && [ -n "$TG_BOT_TOKEN" ]; then
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/editMessageText" \
+            -d "chat_id=${TG_CHAT_ID}" \
+            -d "message_id=${{ steps.notify-start.outputs.TG_MSG_ID }}" \
+            -d "parse_mode=Markdown" \
+            -d "text=${MSG}" \
+            -d "disable_web_page_preview=true"
         fi
