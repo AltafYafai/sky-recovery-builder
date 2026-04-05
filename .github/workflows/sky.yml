@@ -93,7 +93,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ github.workspace }}/SkyRecovery/.repo
-        key: sky-recovery-repo-${{ hashFiles('**/default.xml') }}
+        key: sky-recovery-repo-v2-${{ hashFiles('**/default.xml') }}
         restore-keys: |
           sky-recovery-repo-
 
