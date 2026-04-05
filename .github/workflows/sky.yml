@@ -181,15 +181,21 @@ jobs:
         export BUILD_BROKEN_MISSING_REQUIRED_MODULES=true
         export BUILD_BROKEN_VINTF_PRODUCT_COPY_FILES=true
         export BUILD_BROKEN_PREBUILT_ELF_FILES=true
+        export BUILD_BROKEN_USES_BUILD_COPY_MODULE=true
+        export BUILD_BROKEN_MISSING_SYSTEM_RECOVERY=true
         export OVERRIDE_TARGET_FLATTEN_APEX=true
         export TW_EXCLUDE_APEX=true
+        export TARGET_DISABLE_APEX=true
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
         export SELINUX_IGNORE_NEVERALLOWS=true
+        export SOONG_DONT_PANIC=1
+        export SOONG_HOST_GO_EXPERIMENTAL=0
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         # Clean only stale intermediates to avoid unlinkat errors while preserving ccache
         rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
         rm -rf out/target/product/${{ github.event.inputs.DEVICE_NAME }}/obj/EXECUTABLES
-        mka adbd ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
+        # Build recoveryimage only (adbd is already included in TWRP)
+        mka ${{ github.event.inputs.BUILD_TARGET }}image 2>&1 | tee build.log || (tail -n 100 build.log && exit 1)
 
     - name: Upload Build Log to Telegram
       if: always()
