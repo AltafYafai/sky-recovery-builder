@@ -138,6 +138,7 @@ jobs:
         export OVERRIDE_TARGET_FLATTEN_APEX=true
         export TW_EXCLUDE_APEX=true
         export DISABLE_ARTIFACT_PATH_REQUIREMENTS=true
+        export SELINUX_IGNORE_NEVERALLOWS=true
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng
         # Clean out directory to avoid unlinkat errors
         rm -rf out
