@@ -200,60 +200,61 @@ jobs:
 
         # 2. Filter APEX modules - recovery doesn't need APEX and test modules crash Soong.
         #    Instead of clearing the file (which removes needed Soong config types),
-        #    we skip 'apex', 'apex_test', and 'prebuilt_apex' blocks.
-        apex_bp = "system/apex/Android.bp"
-        try:
-            with open(apex_bp, "r") as f:
-                lines = f.readlines()
-            
-            result = []
-            skip = False
-            depth = 0
-            
-            for line in lines:
-                stripped = line.strip()
+        #    we skip 'apex', 'apex_test', 'prebuilt_apex', and 'apex_key' blocks.
+        def filter_bp_file(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    lines = f.readlines()
                 
-                # Start of apex related blocks - skip them
-                if not skip and (stripped.startswith("apex {") or 
-                                stripped.startswith("apex_test {") or 
-                                stripped.startswith("prebuilt_apex {") or
-                                stripped.startswith("apex_key {")):
-                    skip = True
-                    depth = stripped.count("{") - stripped.count("}")
-                    if depth <= 0:
-                        skip = False
-                    continue
+                result = []
+                skip = False
+                depth = 0
                 
-                if skip:
-                    depth += stripped.count("{") - stripped.count("}")
-                    if depth <= 0:
-                        skip = False
-                    continue
+                for line in lines:
+                    stripped = line.strip()
+                    
+                    # Start of apex related blocks - skip them
+                    if not skip and (stripped.startswith("apex {") or 
+                                    stripped.startswith("apex_test {") or 
+                                    stripped.startswith("prebuilt_apex {") or
+                                    stripped.startswith("apex_key {") or
+                                    stripped.startswith("apex_defaults {") or
+                                    stripped.startswith("apex_binary {") or
+                                    stripped.startswith("apex_set {")):
+                        skip = True
+                        depth = stripped.count("{") - stripped.count("}")
+                        if depth <= 0:
+                            skip = False
+                        continue
+                    
+                    if skip:
+                        depth += stripped.count("{") - stripped.count("}")
+                        if depth <= 0:
+                            skip = False
+                        continue
+                    
+                    result.append(line)
                 
-                result.append(line)
-            
-            with open(apex_bp, "w") as f:
-                f.writelines(result)
-            print("✓ Filtered APEX modules (kept Soong config types)")
-        except Exception as e:
-            print(f"Warning: APEX patch failed: {e}")
+                if len(result) != len(lines):
+                    with open(file_path, "w") as f:
+                        f.writelines(result)
+                    return True
+            except Exception as e:
+                print(f"Error patching {file_path}: {e}")
+            return False
+
+        print("Patching system/apex/Android.bp...")
+        if filter_bp_file("system/apex/Android.bp"):
+            print("✓ Filtered system/apex/Android.bp")
 
         # 2.1 Find and disable other APEX modules in the tree that might cause panics
         try:
             import subprocess
             print("Searching for other APEX modules...")
-            find_cmd = "find . -name Android.bp -not -path './system/apex/*' -exec grep -lE '^(apex|apex_test|prebuilt_apex) \{' {} +"
+            find_cmd = "find . -name Android.bp -not -path './system/apex/*' -exec grep -lE '^(apex|apex_test|prebuilt_apex|apex_key|apex_defaults|apex_binary|apex_set) \{' {} +"
             files = subprocess.check_output(find_cmd, shell=True).decode().splitlines()
             for bp_file in files:
-                with open(bp_file, 'r') as f:
-                    content = f.read()
-                # Rename the module types to something Soong ignores
-                new_content = content.replace('\napex {', '\ndisabled_apex {')
-                new_content = new_content.replace('\napex_test {', '\ndisabled_apex_test {')
-                new_content = new_content.replace('\nprebuilt_apex {', '\ndisabled_prebuilt_apex {')
-                if content != new_content:
-                    with open(bp_file, 'w') as f:
-                        f.write(new_content)
+                if filter_bp_file(bp_file):
                     print(f"  ✓ Patched {bp_file}")
         except Exception as e:
             print(f"Warning: Global APEX search/patch failed: {e}")
