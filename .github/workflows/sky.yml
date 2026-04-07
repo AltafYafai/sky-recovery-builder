@@ -200,7 +200,7 @@ jobs:
 
         # 2. Filter APEX modules - recovery doesn't need APEX and test modules crash Soong.
         #    Instead of clearing the file (which removes needed Soong config types),
-        #    we only skip 'apex {' and 'apex_test {' blocks.
+        #    we skip 'apex', 'apex_test', and 'prebuilt_apex' blocks.
         apex_bp = "system/apex/Android.bp"
         try:
             with open(apex_bp, "r") as f:
@@ -213,8 +213,11 @@ jobs:
             for line in lines:
                 stripped = line.strip()
                 
-                # Start of apex or apex_test block - skip it
-                if not skip and (stripped.startswith("apex {") or stripped.startswith("apex_test {")):
+                # Start of apex related blocks - skip them
+                if not skip and (stripped.startswith("apex {") or 
+                                stripped.startswith("apex_test {") or 
+                                stripped.startswith("prebuilt_apex {") or
+                                stripped.startswith("apex_key {")):
                     skip = True
                     depth = stripped.count("{") - stripped.count("}")
                     if depth <= 0:
@@ -234,6 +237,26 @@ jobs:
             print("✓ Filtered APEX modules (kept Soong config types)")
         except Exception as e:
             print(f"Warning: APEX patch failed: {e}")
+
+        # 2.1 Find and disable other APEX modules in the tree that might cause panics
+        try:
+            import subprocess
+            print("Searching for other APEX modules...")
+            find_cmd = "find . -name Android.bp -not -path './system/apex/*' -exec grep -lE '^(apex|apex_test|prebuilt_apex) \{' {} +"
+            files = subprocess.check_output(find_cmd, shell=True).decode().splitlines()
+            for bp_file in files:
+                with open(bp_file, 'r') as f:
+                    content = f.read()
+                # Rename the module types to something Soong ignores
+                new_content = content.replace('\napex {', '\ndisabled_apex {')
+                new_content = new_content.replace('\napex_test {', '\ndisabled_apex_test {')
+                new_content = new_content.replace('\nprebuilt_apex {', '\ndisabled_prebuilt_apex {')
+                if content != new_content:
+                    with open(bp_file, 'w') as f:
+                        f.write(new_content)
+                    print(f"  ✓ Patched {bp_file}")
+        except Exception as e:
+            print(f"Warning: Global APEX search/patch failed: {e}")
 
         # 3. Fix bionic glob - the clang-builtins path might be a file, replace it with directory
         try:
