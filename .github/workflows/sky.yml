@@ -198,14 +198,40 @@ jobs:
         except Exception as e:
             print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Clear ALL APEX modules - recovery doesn't need APEX and test modules crash Soong
-        #    The system/apex/Android.bp has dozens of broken test/example modules that cause
-        #    Soong nil pointer panics. Instead of patching each one, just empty the file.
+        # 2. Filter APEX modules - recovery doesn't need APEX and test modules crash Soong.
+        #    Instead of clearing the file (which removes needed Soong config types),
+        #    we only skip 'apex {' and 'apex_test {' blocks.
         apex_bp = "system/apex/Android.bp"
         try:
+            with open(apex_bp, "r") as f:
+                lines = f.readlines()
+            
+            result = []
+            skip = False
+            depth = 0
+            
+            for line in lines:
+                stripped = line.strip()
+                
+                # Start of apex or apex_test block - skip it
+                if not skip and (stripped.startswith("apex {") or stripped.startswith("apex_test {")):
+                    skip = True
+                    depth = stripped.count("{") - stripped.count("}")
+                    if depth <= 0:
+                        skip = False
+                    continue
+                
+                if skip:
+                    depth += stripped.count("{") - stripped.count("}")
+                    if depth <= 0:
+                        skip = False
+                    continue
+                
+                result.append(line)
+            
             with open(apex_bp, "w") as f:
-                f.write("// APEX modules disabled for recovery build\n")
-            print("✓ Cleared APEX modules (recovery doesn't need them)")
+                f.writelines(result)
+            print("✓ Filtered APEX modules (kept Soong config types)")
         except Exception as e:
             print(f"Warning: APEX patch failed: {e}")
 
