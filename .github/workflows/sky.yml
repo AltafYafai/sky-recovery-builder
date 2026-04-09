@@ -158,9 +158,8 @@ jobs:
     - name: Patching Source
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
-        # Official TWRP repos should already handle these issues.
+        # Official TWRP repos should already handle most issues.
         # Minimal bionic fix just in case for older toolchains
-        # Ensure the path is a directory and not a file or broken symlink
         BIONIC_PATH="bionic/libc/versioner-dependencies/common/clang-builtins"
         if [ -e "$BIONIC_PATH" ] || [ -L "$BIONIC_PATH" ]; then
           if [ ! -d "$BIONIC_PATH" ]; then
@@ -170,6 +169,36 @@ jobs:
         mkdir -p "$BIONIC_PATH"
         touch "$BIONIC_PATH/.keep"
         echo "✓ Basic bionic structure verified"
+
+        # Surgical ICU Patch: Remove java_sdk_library modules that require missing API tracking files
+        python3 << 'PYEOF'
+        import os
+        icu_bp = "external/icu/android_icu4j/Android.bp"
+        if os.path.exists(icu_bp):
+            try:
+                with open(icu_bp, "r") as f:
+                    lines = f.readlines()
+                result = []
+                skip = False
+                depth = 0
+                for line in lines:
+                    stripped = line.strip()
+                    if not skip and stripped.startswith("java_sdk_library {"):
+                        skip = True
+                        depth = stripped.count("{") - stripped.count("}")
+                        if depth <= 0: skip = False
+                        continue
+                    if skip:
+                        depth += stripped.count("{") - stripped.count("}")
+                        if depth <= 0: skip = False
+                        continue
+                    result.append(line)
+                with open(icu_bp, "w") as f:
+                    f.writelines(result)
+                print("✓ Surgically patched external/icu/android_icu4j/Android.bp")
+            except Exception as e:
+                print(f"Warning: ICU patch failed: {e}")
+        PYEOF
 
     - name: Building Sky Recovery
       run: |
