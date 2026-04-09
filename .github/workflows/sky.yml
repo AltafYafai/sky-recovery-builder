@@ -170,34 +170,73 @@ jobs:
         touch "$BIONIC_PATH/.keep"
         echo "✓ Basic bionic structure verified"
 
-        # Surgical ICU Patch: Remove java_sdk_library modules that require missing API tracking files
+        # Surgical Patching Script
         python3 << 'PYEOF'
-        import os
-        icu_bp = "external/icu/android_icu4j/Android.bp"
-        if os.path.exists(icu_bp):
+        import os, subprocess
+
+        def filter_bp_file(file_path):
             try:
-                with open(icu_bp, "r") as f:
+                with open(file_path, "r") as f:
                     lines = f.readlines()
+                
                 result = []
                 skip = False
                 depth = 0
+                modified = False
+                
                 for line in lines:
                     stripped = line.strip()
-                    if not skip and stripped.startswith("java_sdk_library {"):
+                    
+                    # Start of blocks to skip (APEX and java_sdk_library)
+                    if not skip and (stripped.startswith("apex {") or 
+                                    stripped.startswith("apex_test {") or 
+                                    stripped.startswith("prebuilt_apex {") or
+                                    stripped.startswith("apex_key {") or
+                                    stripped.startswith("apex_defaults {") or
+                                    stripped.startswith("apex_binary {") or
+                                    stripped.startswith("override_apex {") or
+                                    stripped.startswith("apex_vndk {") or
+                                    stripped.startswith("apex_set {") or
+                                    stripped.startswith("java_sdk_library {")):
                         skip = True
                         depth = stripped.count("{") - stripped.count("}")
-                        if depth <= 0: skip = False
+                        if depth <= 0:
+                            skip = False
+                        modified = True
                         continue
+                    
                     if skip:
                         depth += stripped.count("{") - stripped.count("}")
-                        if depth <= 0: skip = False
+                        if depth <= 0:
+                            skip = False
                         continue
+                    
                     result.append(line)
-                with open(icu_bp, "w") as f:
-                    f.writelines(result)
-                print("✓ Surgically patched external/icu/android_icu4j/Android.bp")
+                
+                if modified:
+                    with open(file_path, "w") as f:
+                        f.writelines(result)
+                    return True
             except Exception as e:
-                print(f"Warning: ICU patch failed: {e}")
+                print(f"Error patching {file_path}: {e}")
+            return False
+
+        # 1. Patch ICU
+        icu_bp = "external/icu/android_icu4j/Android.bp"
+        if os.path.exists(icu_bp):
+            if filter_bp_file(icu_bp):
+                print(f"✓ Surgically patched {icu_bp}")
+
+        # 2. Patch APEX everywhere
+        print("Searching for APEX modules to filter...")
+        try:
+            find_cmd = "find . -name Android.bp -exec grep -lE '^[[:space:]]*(apex|apex_test|prebuilt_apex|apex_key|apex_defaults|apex_binary|override_apex|apex_vndk|apex_set)[[:space:]]*\\{' {} +"
+            files = subprocess.check_output(find_cmd, shell=True).decode().splitlines()
+            for bp_file in files:
+                if filter_bp_file(bp_file):
+                    print(f"  ✓ Filtered APEX from {bp_file}")
+        except Exception as e:
+            print(f"Warning: Global APEX filtering failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
