@@ -214,12 +214,14 @@ jobs:
                     stripped = line.strip()
                     
                     # Start of apex related blocks - skip them
-                    if not skip and (stripped.startswith("apex {") or 
-                                    stripped.startswith("apex_test {") or 
+                    if not skip and (stripped.startswith("apex {") or
+                                    stripped.startswith("apex_test {") or
                                     stripped.startswith("prebuilt_apex {") or
                                     stripped.startswith("apex_key {") or
                                     stripped.startswith("apex_defaults {") or
                                     stripped.startswith("apex_binary {") or
+                                    stripped.startswith("override_apex {") or
+                                    stripped.startswith("apex_vndk {") or
                                     stripped.startswith("apex_set {")):
                         skip = True
                         depth = stripped.count("{") - stripped.count("}")
@@ -251,7 +253,7 @@ jobs:
         try:
             import subprocess
             print("Searching for other APEX modules...")
-            find_cmd = "find . -name Android.bp -not -path './system/apex/*' -exec grep -lE '^(apex|apex_test|prebuilt_apex|apex_key|apex_defaults|apex_binary|apex_set) \{' {} +"
+            find_cmd = "find . -name Android.bp -not -path './system/apex/*' -exec grep -lE '^[[:space:]]*(apex|apex_test|prebuilt_apex|apex_key|apex_defaults|apex_binary|apex_set|override_apex|apex_vndk)[[:space:]]*\\{' {} +"
             files = subprocess.check_output(find_cmd, shell=True).decode().splitlines()
             for bp_file in files:
                 if filter_bp_file(bp_file):
