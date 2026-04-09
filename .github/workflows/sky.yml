@@ -158,127 +158,11 @@ jobs:
     - name: Patching Source
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
-
-        python3 << 'PYEOF'
-        import os, shutil
-
-        # 1. Fix ICU: java_sdk_library modules need API tracking files that don't exist
-        #    Remove ALL java_sdk_library blocks (not needed for recovery build)
-        icu_bp = "external/icu/android_icu4j/Android.bp"
-        try:
-            with open(icu_bp, "r") as f:
-                lines = f.readlines()
-            
-            result = []
-            skip = False
-            depth = 0
-            
-            for line in lines:
-                stripped = line.strip()
-                
-                # Start of java_sdk_library block - skip entire block
-                if not skip and stripped.startswith("java_sdk_library"):
-                    skip = True
-                    depth = stripped.count("{") - stripped.count("}")
-                    if depth <= 0:
-                        skip = False
-                    continue
-                
-                if skip:
-                    depth += stripped.count("{") - stripped.count("}")
-                    if depth <= 0:
-                        skip = False
-                    continue
-                
-                result.append(line)
-            
-            with open(icu_bp, "w") as f:
-                f.writelines(result)
-            print("✓ Removed java_sdk_library modules from ICU")
-        except Exception as e:
-            print(f"Warning: ICU patch failed: {e}")
-
-        # 2. Filter APEX modules - recovery doesn't need APEX and test modules crash Soong.
-        #    Instead of clearing the file (which removes needed Soong config types),
-        #    we skip 'apex', 'apex_test', 'prebuilt_apex', and 'apex_key' blocks.
-        def filter_bp_file(file_path):
-            try:
-                with open(file_path, "r") as f:
-                    lines = f.readlines()
-                
-                result = []
-                skip = False
-                depth = 0
-                
-                for line in lines:
-                    stripped = line.strip()
-                    
-                    # Start of apex related blocks - skip them
-                    if not skip and (stripped.startswith("apex {") or
-                                    stripped.startswith("apex_test {") or
-                                    stripped.startswith("prebuilt_apex {") or
-                                    stripped.startswith("apex_key {") or
-                                    stripped.startswith("apex_defaults {") or
-                                    stripped.startswith("apex_binary {") or
-                                    stripped.startswith("override_apex {") or
-                                    stripped.startswith("apex_vndk {") or
-                                    stripped.startswith("apex_set {")):
-                        skip = True
-                        depth = stripped.count("{") - stripped.count("}")
-                        if depth <= 0:
-                            skip = False
-                        continue
-                    
-                    if skip:
-                        depth += stripped.count("{") - stripped.count("}")
-                        if depth <= 0:
-                            skip = False
-                        continue
-                    
-                    result.append(line)
-                
-                if len(result) != len(lines):
-                    with open(file_path, "w") as f:
-                        f.writelines(result)
-                    return True
-            except Exception as e:
-                print(f"Error patching {file_path}: {e}")
-            return False
-
-        print("Patching system/apex/Android.bp...")
-        if filter_bp_file("system/apex/Android.bp"):
-            print("✓ Filtered system/apex/Android.bp")
-
-        # 2.1 Find and disable other APEX modules in the tree that might cause panics
-        try:
-            import subprocess
-            print("Searching for other APEX modules...")
-            find_cmd = "find . -name Android.bp -not -path './system/apex/*' -exec grep -lE '^[[:space:]]*(apex|apex_test|prebuilt_apex|apex_key|apex_defaults|apex_binary|apex_set|override_apex|apex_vndk)[[:space:]]*\\{' {} +"
-            files = subprocess.check_output(find_cmd, shell=True).decode().splitlines()
-            for bp_file in files:
-                if filter_bp_file(bp_file):
-                    print(f"  ✓ Patched {bp_file}")
-        except Exception as e:
-            print(f"Warning: Global APEX search/patch failed: {e}")
-
-        # 3. Fix bionic glob - the clang-builtins path might be a file, replace it with directory
-        try:
-            bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
-            if os.path.islink(bionic_path):
-                os.unlink(bionic_path)
-            elif os.path.isfile(bionic_path):
-                os.remove(bionic_path)
-            elif os.path.isdir(bionic_path):
-                shutil.rmtree(bionic_path, ignore_errors=True)
-            os.makedirs(bionic_path, exist_ok=True)
-            # Create a placeholder file inside so it's a valid directory
-            placeholder = os.path.join(bionic_path, ".keep")
-            if not os.path.exists(placeholder):
-                open(placeholder, "w").close()
-            print("✓ Fixed bionic glob path")
-        except Exception as e:
-            print(f"Warning: bionic fix failed: {e}")
-        PYEOF
+        # Official TWRP repos should already handle these issues.
+        # Minimal bionic fix just in case for older toolchains
+        mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
+        touch bionic/libc/versioner-dependencies/common/clang-builtins/.keep
+        echo "✓ Basic bionic structure verified"
 
     - name: Building Sky Recovery
       run: |
@@ -297,6 +181,7 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
+        export SOONG_ALLOW_MISSING_DEPENDENCIES=true
         export WITH_DEXPREOPT=false
         export UNSAFE_IGNORE_MISSING_LATEST_API=true
         export BUILD_BROKEN_DUP_RULES=true
