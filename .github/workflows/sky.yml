@@ -160,8 +160,15 @@ jobs:
         cd ${GITHUB_WORKSPACE}/SkyRecovery
         # Official TWRP repos should already handle these issues.
         # Minimal bionic fix just in case for older toolchains
-        mkdir -p bionic/libc/versioner-dependencies/common/clang-builtins
-        touch bionic/libc/versioner-dependencies/common/clang-builtins/.keep
+        # Ensure the path is a directory and not a file or broken symlink
+        BIONIC_PATH="bionic/libc/versioner-dependencies/common/clang-builtins"
+        if [ -e "$BIONIC_PATH" ] || [ -L "$BIONIC_PATH" ]; then
+          if [ ! -d "$BIONIC_PATH" ]; then
+            rm -rf "$BIONIC_PATH"
+          fi
+        fi
+        mkdir -p "$BIONIC_PATH"
+        touch "$BIONIC_PATH/.keep"
         echo "✓ Basic bionic structure verified"
 
     - name: Building Sky Recovery
