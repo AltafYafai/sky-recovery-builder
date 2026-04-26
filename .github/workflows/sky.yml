@@ -86,7 +86,7 @@ jobs:
     - name: Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 12
+        swap-size-gb: 16
 
     - name: Restore Cached Source
       id: cache-restore
@@ -100,7 +100,7 @@ jobs:
     - name: Build Environment
       run: |
         sudo apt update
-        sudo apt install aria2 curl git repo -y
+        sudo apt install aria2 curl git repo ninja-build bc -y
         git config --global user.name "altafyafai"
         git config --global user.email "altaf.alu@gmail.com"
 
