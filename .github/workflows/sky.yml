@@ -207,7 +207,18 @@ jobs:
             except Exception as e:
                 print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Fix bionic glob path
+        # 2. Clear ALL APEX modules - recovery doesn't need APEX and test modules crash Soong
+        apex_bps = ["system/apex/Android.bp", "system/apex/tests/Android.bp"]
+        for bp in apex_bps:
+            if os.path.exists(bp):
+                try:
+                    with open(bp, "w") as f:
+                        f.write("// APEX modules disabled for recovery build\n")
+                    print(f"✓ Cleared {bp}")
+                except Exception as e:
+                    print(f"Warning: Failed to clear {bp}: {e}")
+
+        # 3. Fix bionic glob path
         bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
         try:
             if os.path.exists(bionic_path) or os.path.islink(bionic_path):
