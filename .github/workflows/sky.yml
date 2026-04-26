@@ -14,7 +14,7 @@ on:
       DEVICE_TREE:
         description: 'Custom Recovery Tree'
         required: true
-        default: 'https://github.com/AltafYafai/device_xiaomi_sky-recovery'
+        default: 'https://github.com/AltafYafai/device_xiaomi_sky-recovery.git'
       DEVICE_TREE_BRANCH:
         description: 'Custom Recovery Tree Branch'
         required: true
@@ -127,16 +127,26 @@ jobs:
         fi
 
         # Inject GH_TOKEN into manifest URL for private repo access
-        MANIFEST_AUTH=$(echo "${{ github.event.inputs.MANIFEST_URL }}" | sed 's|https://|https://${{ secrets.GH_TOKEN }}@|')
+        # Fallback to GITHUB_TOKEN if GH_TOKEN is empty
+        TOKEN=${{ secrets.GH_TOKEN }}
+        if [ -z "$TOKEN" ]; then TOKEN=${{ secrets.GITHUB_TOKEN }}; fi
+        
+        MANIFEST_AUTH=$(echo "${{ github.event.inputs.MANIFEST_URL }}" | sed "s|https://|https://${TOKEN}@|")
         repo init -u ${MANIFEST_AUTH} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+        
         # Inject token into the local manifest to allow syncing private repos
-        sed -i "s|TOKEN|${{ secrets.GH_TOKEN }}|g" .repo/manifests/default.xml
+        if [ -f .repo/manifests/default.xml ]; then
+          sed -i "s|TOKEN|${TOKEN}|g" .repo/manifests/default.xml
+        fi
+        
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Clone Device Tree
       id: clone-tree
       run: |
         cd ${GITHUB_WORKSPACE}/SkyRecovery
+        # Remove existing directory to prevent git clone failure
+        rm -rf ./device/xiaomi/sky
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./device/xiaomi/sky
         echo "COMMIT_ID=$(git -C device/xiaomi/sky rev-parse --short HEAD)" >> $GITHUB_ENV
         echo "COMMIT_MSG=$(git -C device/xiaomi/sky log -1 --pretty=format:"%s")" >> $GITHUB_ENV
@@ -186,6 +196,7 @@ jobs:
         fi
 
         cd ${GITHUB_WORKSPACE}/SkyRecovery
+        export LC_ALL=C
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         export SOONG_ALLOW_MISSING_DEPENDENCIES=true
