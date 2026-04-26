@@ -207,16 +207,38 @@ jobs:
             except Exception as e:
                 print(f"Warning: ICU patch failed: {e}")
 
-        # 2. Clear ALL APEX modules - recovery doesn't need APEX and test modules crash Soong
+        # 2. Clear ONLY problematic APEX modules, preserve configuration types
         apex_bps = ["system/apex/Android.bp", "system/apex/tests/Android.bp"]
         for bp in apex_bps:
             if os.path.exists(bp):
                 try:
+                    with open(bp, "r") as f:
+                        lines = f.readlines()
+                    
+                    result = []
+                    skip = False
+                    depth = 0
+                    # Module types that cause panics or are unnecessary
+                    bad_types = ("apex {", "apex_test {", "apex_key {", "apex_defaults {")
+                    
+                    for line in lines:
+                        stripped = line.strip()
+                        if not skip:
+                            if any(stripped.startswith(t) for t in bad_types):
+                                skip = True
+                                depth = stripped.count("{") - stripped.count("}")
+                                if depth <= 0: skip = False
+                                continue
+                            result.append(line)
+                        else:
+                            depth += stripped.count("{") - stripped.count("}")
+                            if depth <= 0: skip = False
+                    
                     with open(bp, "w") as f:
-                        f.write("// APEX modules disabled for recovery build\n")
-                    print(f"✓ Cleared {bp}")
+                        f.writelines(result)
+                    print(f"✓ Surgically patched {bp}")
                 except Exception as e:
-                    print(f"Warning: Failed to clear {bp}: {e}")
+                    print(f"Warning: Failed to patch {bp}: {e}")
 
         # 3. Fix bionic glob path
         bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
