@@ -216,6 +216,15 @@ jobs:
             print("✓ Fixed bionic glob path")
         except Exception as e:
             print(f"Warning: bionic fix failed: {e}")
+        # 3. Remove problematic hardware interfaces that cause dexpreopt panics
+        try:
+            for d in ["audio", "camera", "tv", "automotive", "wifi", "bluetooth"]:
+                path = os.path.join("hardware/interfaces", d)
+                if os.path.exists(path):
+                    shutil.rmtree(path)
+            print("✓ Removed problematic hardware/interfaces")
+        except Exception as e:
+            print(f"Warning: hardware/interfaces cleanup failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
@@ -237,7 +246,6 @@ jobs:
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         export SOONG_ALLOW_MISSING_DEPENDENCIES=true
-        export WITH_DEXPREOPT=false
         export UNSAFE_IGNORE_MISSING_LATEST_API=true
         export BUILD_BROKEN_DUP_RULES=true
         export BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES=true
