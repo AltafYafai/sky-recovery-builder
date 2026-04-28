@@ -225,14 +225,14 @@ jobs:
             print("✓ Removed problematic hardware/interfaces")
         except Exception as e:
             print(f"Warning: hardware/interfaces cleanup failed: {e}")
-        # 4. Remove recovery apps causing dexpreopt panics
+        # 4. Remove recovery apps and unnecessary ART SDK causing dexpreopt/Soong panics
         try:
-            for d in ["bootable/recovery/updater_sample", "bootable/recovery/tools/recovery_l10n"]:
+            for d in ["bootable/recovery/updater_sample", "bootable/recovery/tools/recovery_l10n", "art/build/sdk"]:
                 if os.path.exists(d):
                     shutil.rmtree(d)
-            print("✓ Removed problematic recovery apps")
+            print("✓ Removed problematic recovery apps and ART SDK")
         except Exception as e:
-            print(f"Warning: recovery apps cleanup failed: {e}")
+            print(f"Warning: apps/SDK cleanup failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
