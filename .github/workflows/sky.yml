@@ -30,7 +30,7 @@ on:
       BUILD_TARGET:
         description: 'Specify your Build Target'
         required: true
-        default: 'recovery'
+        default: 'vendorboot'
         type: choice
         options:
         - recovery
@@ -300,6 +300,10 @@ jobs:
         # Rename for Sky Recovery branding
         if [ -f "${GITHUB_WORKSPACE}/artifacts/recovery.img" ]; then
            mv ${GITHUB_WORKSPACE}/artifacts/recovery.img ${GITHUB_WORKSPACE}/artifacts/Sky-Recovery-Unofficial-${{ github.event.inputs.DEVICE_NAME }}.img
+        fi
+
+        if [ -f "${GITHUB_WORKSPACE}/artifacts/vendor_boot.img" ]; then
+           mv ${GITHUB_WORKSPACE}/artifacts/vendor_boot.img ${GITHUB_WORKSPACE}/artifacts/Sky-Recovery-vendor_boot-${{ github.event.inputs.DEVICE_NAME }}.img
         fi
 
         if [ "$FOUND_ANY" = true ]; then
