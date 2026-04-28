@@ -225,6 +225,14 @@ jobs:
             print("✓ Removed problematic hardware/interfaces")
         except Exception as e:
             print(f"Warning: hardware/interfaces cleanup failed: {e}")
+        # 4. Remove recovery apps causing dexpreopt panics
+        try:
+            for d in ["bootable/recovery/updater_sample", "bootable/recovery/tools/recovery_l10n"]:
+                if os.path.exists(d):
+                    shutil.rmtree(d)
+            print("✓ Removed problematic recovery apps")
+        except Exception as e:
+            print(f"Warning: recovery apps cleanup failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
@@ -246,6 +254,8 @@ jobs:
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         export SOONG_ALLOW_MISSING_DEPENDENCIES=true
+        export DISABLE_DEXPREOPT=true
+        export WITH_DEXPREOPT=false
         export UNSAFE_IGNORE_MISSING_LATEST_API=true
         export BUILD_BROKEN_DUP_RULES=true
         export BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES=true
