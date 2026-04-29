@@ -233,6 +233,20 @@ jobs:
             print("✓ Removed problematic recovery apps and ART SDK")
         except Exception as e:
             print(f"Warning: apps/SDK cleanup failed: {e}")
+        # 5. Dynamically find and delete any build files defining HelloActivityProduct
+        try:
+            import glob
+            for filepath in glob.glob("**/*/Android.bp", recursive=True) + glob.glob("**/*/Android.mk", recursive=True):
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        if "HelloActivityProduct" in f.read():
+                            dir_to_remove = os.path.dirname(filepath)
+                            print(f"Found HelloActivityProduct in {filepath}, deleting directory {dir_to_remove}...")
+                            shutil.rmtree(dir_to_remove)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Warning: HelloActivityProduct cleanup failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
