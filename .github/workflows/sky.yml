@@ -150,8 +150,8 @@ jobs:
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./device/xiaomi/sky
         echo "COMMIT_ID=$(git -C device/xiaomi/sky rev-parse --short HEAD)" >> $GITHUB_ENV
         echo "COMMIT_MSG=$(git -C device/xiaomi/sky log -1 --pretty=format:"%s")" >> $GITHUB_ENV
-        # TWRP uses twrp_ prefix for target product
-        echo "TARGET_PRODUCT=twrp_${{ github.event.inputs.DEVICE_NAME }}" >> $GITHUB_ENV
+        # Output directory usually matches the DEVICE_NAME without prefix
+        echo "TARGET_PRODUCT=${{ github.event.inputs.DEVICE_NAME }}" >> $GITHUB_ENV
 
         # Update Telegram with commit info
         BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
