@@ -216,16 +216,6 @@ jobs:
             print("✓ Fixed bionic glob path")
         except Exception as e:
             print(f"Warning: bionic fix failed: {e}")
-        # 3. Remove problematic hardware interfaces that cause dexpreopt panics
-        try:
-            for d in ["audio", "camera", "tv", "automotive", "wifi", "bluetooth"]:
-                path = os.path.join("hardware/interfaces", d)
-                if os.path.exists(path):
-                    shutil.rmtree(path)
-            print("✓ Removed problematic hardware/interfaces")
-        except Exception as e:
-            print(f"Warning: hardware/interfaces cleanup failed: {e}")
-        # 4. (Removed hacky Python cleanup script as official TWRP manifest handles dependencies)
         PYEOF
 
     - name: Building Sky Recovery
