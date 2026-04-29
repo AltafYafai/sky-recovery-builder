@@ -203,19 +203,6 @@ jobs:
                 print("✓ Surgically patched system/apex/Android.bp")
             except Exception as e:
                 print(f"Warning: APEX patch failed: {e}")
-
-        # 2. Fix bionic glob path (Common AOSP 12.1 build error)
-        bionic_path = "bionic/libc/versioner-dependencies/common/clang-builtins"
-        try:
-            if os.path.exists(bionic_path) or os.path.islink(bionic_path):
-                if os.path.islink(bionic_path): os.unlink(bionic_path)
-                elif os.path.isfile(bionic_path): os.remove(bionic_path)
-                elif os.path.isdir(bionic_path): shutil.rmtree(bionic_path)
-            os.makedirs(bionic_path, exist_ok=True)
-            with open(os.path.join(bionic_path, ".keep"), "w") as f: pass
-            print("✓ Fixed bionic glob path")
-        except Exception as e:
-            print(f"Warning: bionic fix failed: {e}")
         PYEOF
 
     - name: Building Sky Recovery
